@@ -685,7 +685,7 @@ module AlgoliaSearch
         params[:page] -= 1 if params[:page].to_i > 0
       end
       json = algolia_raw_search(q, params)
-      hit_ids = json['hits'].map { |hit| hit['objectID'] }
+      hit_ids = json[:hits].map { |hit| hit[:objectID] }
       if defined?(::Mongoid::Document) && self.include?(::Mongoid::Document)
         condition_key = algolia_object_id_method.in
       else
@@ -694,8 +694,8 @@ module AlgoliaSearch
       results_by_id = algoliasearch_options[:type].where(condition_key => hit_ids).index_by do |hit|
         algolia_object_id_of(hit)
       end
-      results = json['hits'].map do |hit|
-        o = results_by_id[hit['objectID'].to_s]
+      results = json[:hits].map do |hit|
+        o = results_by_id[hit[:objectID].to_s]
         if o
           o.highlight_result = hit['_highlightResult']
           o.snippet_result = hit['_snippetResult']
