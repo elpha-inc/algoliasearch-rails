@@ -12,7 +12,7 @@ require 'logger'
 require 'sequel'
 require 'active_model_serializers'
 
-AlgoliaSearch.configuration = { :application_id => ENV['ALGOLIA_APPLICATION_ID'], :api_key => ENV['ALGOLIA_API_KEY'], :symbolize_keys => false }
+AlgoliaSearch.configuration = { :application_id => ENV['ALGOLIA_APPLICATION_ID'], :api_key => ENV['ALGOLIA_API_KEY'] }
 
 FileUtils.rm( 'data.sqlite3' ) rescue nil
 ActiveRecord::Base.logger = Logger.new(STDOUT)
@@ -48,6 +48,9 @@ ActiveRecord::Schema.define do
     t.string :type
     t.text :description
     t.datetime :release_date
+  end
+  create_table :phones do |t|
+    t.string :name
   end
   create_table :colors do |t|
     t.string :name
@@ -97,6 +100,9 @@ ActiveRecord::Schema.define do
   create_table :disabled_procs do |t|
     t.string :name
   end
+  create_table :disabled_indexings do |t|
+    t.string :name
+  end
   create_table :disabled_symbols do |t|
     t.string :name
   end
@@ -109,6 +115,9 @@ ActiveRecord::Schema.define do
     t.string :name
   end
   create_table :sub_replicas do |t|
+    t.string :name
+  end
+  create_table :virtual_replicas do |t|
     t.string :name
   end
   create_table :enqueued_objects do |t|
@@ -125,6 +134,13 @@ ActiveRecord::Schema.define do
       t.string :name
       t.string :skip
     end
+  end
+end
+
+class DisabledIndexing < ActiveRecord::Base
+  include AlgoliaSearch
+
+  algoliasearch :disable_indexing => true, :check_settings => true do
   end
 end
 
@@ -157,6 +173,12 @@ class Product < ActiveRecord::Base
 end
 
 class Camera < Product
+end
+
+class Phone < ActiveRecord::Base
+  include AlgoliaSearch
+  algoliasearch :check_settings => false, :index_name => safe_index_name("Phone") do
+  end
 end
 
 class Color < ActiveRecord::Base
@@ -312,7 +334,7 @@ class SequelBook < Sequel::Model(SEQUEL_DB)
 
   include AlgoliaSearch
 
-  algoliasearch :synchronous => true, :index_name => safe_index_name("SequelBook"), :per_environment => true, :sanitize => true do
+  algoliasearch :synchronous => true, :index_name => safe_index_name("SequelBook"), :per_environment => true, :sanitize => true, :check_settings => true do
     add_attribute :test
     add_attribute :test2
 
@@ -337,9 +359,97 @@ class SequelBook < Sequel::Model(SEQUEL_DB)
   end
 end
 
+describe 'DisabledIndexing' do
+  it 'should not call get_settings' do
+    expect_any_instance_of(Algolia::Search::Index).not_to receive(:get_settings)
+    DisabledIndexing.send(:algolia_ensure_init)
+  end
+end
+
+describe 'EnableCheckSettingsSynchronously' do
+  before(:each) do
+    # NOTE:
+    #   Redefine below class *each* time to avoid the cache in the class.
+    #   If the cahce is ready, algolia_ensure_init call neither set_settings nor set_settings! ever.
+    Object.send(:remove_const, :EnableCheckSettingsSynchronously) if Object.constants.include?(:EnableCheckSettingsSynchronously)
+    class EnableCheckSettingsSynchronously < ActiveRecord::Base
+      include AlgoliaSearch
+
+      algoliasearch :check_settings => true, :synchronous => true do
+      end
+    end
+  end
+
+  describe 'has settings changes' do
+    before(:each) do
+      allow(EnableCheckSettingsSynchronously).to receive(:algoliasearch_settings_changed?).and_return(true)
+    end
+
+    it 'should call set_setting with wait_task(sync)' do
+      expect_any_instance_of(Algolia::Search::Index).to receive(:set_settings).and_call_original # wait_task use this return val
+      expect_any_instance_of(Algolia::Search::Index).to receive(:wait_task)
+      EnableCheckSettingsSynchronously.send(:algolia_ensure_init)
+    end
+  end
+
+  describe 'has no settings changes' do
+    before(:each) do
+      allow(EnableCheckSettingsSynchronously).to receive(:algoliasearch_settings_changed?).and_return(false)
+    end
+
+    it 'should not call set_setting' do
+      expect_any_instance_of(Algolia::Search::Index).not_to receive(:set_settings)
+      EnableCheckSettingsSynchronously.send(:algolia_ensure_init)
+    end
+  end
+end
+
+describe 'EnableCheckSettingsAsynchronously' do
+  before(:each) do
+    # NOTE:
+    #   Redefine below class *each* time to avoid the cache in the class.
+    #   If the cahce is ready, algolia_ensure_init call neither set_settings nor set_settings! ever.
+    Object.send(:remove_const, :EnableCheckSettingsAsynchronously) if Object.constants.include?(:EnableCheckSettingsAsynchronously)
+    class EnableCheckSettingsAsynchronously < ActiveRecord::Base
+      include AlgoliaSearch
+
+      algoliasearch :check_settings => true, :synchronous => false do
+      end
+    end
+  end
+
+  describe 'has settings changes' do
+    before(:each) do
+      allow(EnableCheckSettingsAsynchronously).to receive(:algoliasearch_settings_changed?).and_return(true)
+    end
+
+    it 'should call set_setting without wait_task(sync)' do
+      expect_any_instance_of(Algolia::Search::Index).to receive(:set_settings)
+      expect_any_instance_of(Algolia::Search::Index).not_to receive(:wait_task)
+      EnableCheckSettingsAsynchronously.send(:algolia_ensure_init)
+    end
+  end
+
+  describe 'has no settings changes' do
+    before(:each) do
+      allow(EnableCheckSettingsAsynchronously).to receive(:algoliasearch_settings_changed?).and_return(false)
+    end
+
+    it 'should not call set_setting' do
+      expect_any_instance_of(Algolia::Search::Index).not_to receive(:set_settings)
+      EnableCheckSettingsAsynchronously.send(:algolia_ensure_init)
+    end
+  end
+end
+
 describe 'SequelBook' do
   before(:all) do
     SequelBook.clear_index!(true)
+  end
+
+  it 'should call get_settings' do
+    expect_any_instance_of(Algolia::Search::Index).to receive(:get_settings)
+    SequelBook.send(:algolia_ensure_init)
   end
 
   it "should index the book" do
@@ -436,6 +546,19 @@ class SubReplicas < ActiveRecord::Base
         searchableAttributes ['name']
         customRanking ["desc(name)"]
       end
+    end
+  end
+end
+
+class VirtualReplicas < ActiveRecord::Base
+  include AlgoliaSearch
+
+  algoliasearch :synchronous => true, :force_utf8_encoding => true, :index_name => safe_index_name("VirtualReplica_primary") do
+    searchableAttributes [:name]
+    customRanking ["asc(name)"]
+
+    add_replica safe_index_name("VirtualReplica_replica"), virtual: true do
+      customRanking ["desc(name)"]
     end
   end
 end
@@ -550,6 +673,7 @@ describe 'Settings' do
     Color.send(:algoliasearch_settings_changed?, {}, {}).should == false
     Color.send(:algoliasearch_settings_changed?, {"searchableAttributes" => ["name"]}, {:searchableAttributes => ["name"]}).should == false
     Color.send(:algoliasearch_settings_changed?, {"searchableAttributes" => ["name"], "customRanking" => ["asc(hex)"]}, {"customRanking" => ["asc(hex)"]}).should == false
+    Color.send(:algoliasearch_settings_changed?, {"customRanking" => nil}, {"customRanking" => []}).should == false
   end
 
 end
@@ -861,7 +985,10 @@ describe 'An imaginary store' do
     @products_in_database = Product.all
 
     Product.reindex(AlgoliaSearch::IndexSettings::DEFAULT_BATCH_SIZE, true)
-    sleep 5
+  end
+
+  it "should reindex with :check_settings set to false" do
+    Phone.reindex(AlgoliaSearch::IndexSettings::DEFAULT_BATCH_SIZE, true)
   end
 
   it "should not be synchronous" do
@@ -1096,6 +1223,10 @@ describe "FowardToReplicas" do
         add_replica safe_index_name('ForwardToReplicas_replica') do
           attributesToHighlight %w(replica_highlight)
         end
+
+        add_replica safe_index_name('ForwardToReplicas_replica_inherited'), :inherit => true do
+          attributesToHighlight %w(replica_highlight)
+        end
       end
     end
   end
@@ -1134,6 +1265,10 @@ describe "FowardToReplicas" do
         add_replica safe_index_name('ForwardToReplicas_replica'), :inherit => true do
           attributesToHighlight %w(replica_highlight)
         end
+
+        add_replica safe_index_name('ForwardToReplicas_replica_inherited'), :inherit => true do
+          attributesToHighlight %w(replica_highlight)
+        end
       end
     end
 
@@ -1154,6 +1289,42 @@ describe "FowardToReplicas" do
     expect(replica_settings['attributesToHighlight']).to eq(%w(replica_highlight))
 
     expect(ForwardToReplicas.index.name).to eq(ForwardToReplicasTwo.index.name)
+  end
+
+  it "shouldn't update the replica settings if there is no change" do
+    Object.send(:remove_const, :ForwardToReplicasTwo) if Object.constants.include?(:ForwardToReplicasTwo)
+
+    class ForwardToReplicasTwo < ActiveRecord::Base
+      include AlgoliaSearch
+
+      algoliasearch :synchronous => true, :index_name => safe_index_name('ForwardToReplicas') do
+        attribute :name
+        searchableAttributes %w(first_value)
+        attributesToHighlight %w(primary_highlight)
+
+        add_replica safe_index_name('ForwardToReplicas_replica') do
+          attributesToHighlight %w(replica_highlight)
+        end
+
+        add_replica safe_index_name('ForwardToReplicas_replica_inherited'), :inherit => true do
+          attributesToHighlight %w(replica_highlight)
+        end
+      end
+    end
+
+    ForwardToReplicas.send :algolia_ensure_init
+
+    # Hacky way to hook replica settings update
+    ForwardToReplicas.create(:name => 'val')
+    ForwardToReplicas.reindex!
+
+    expect_any_instance_of(Algolia::Search::Index).not_to receive(:set_settings!)
+
+    ForwardToReplicasTwo.send :algolia_ensure_init
+
+    # Hacky way to hook replica settings update
+    ForwardToReplicasTwo.create(:name => 'val2')
+    ForwardToReplicasTwo.reindex!
   end
 end
 
@@ -1183,6 +1354,25 @@ describe "SubReplicas" do
 
   it "should be searchable through added indexes replica" do
     expect { SubReplicas.raw_search('something', :index => safe_index_name('Replica_Index')) }.not_to raise_error
+  end
+end
+
+describe "VirtualReplicas" do
+  before(:all) do
+    VirtualReplicas.clear_index!(true)
+  end
+
+  it "setup the replica" do
+    VirtualReplicas.send(:algolia_configurations).to_a.each do |v|
+      if v[0][:replica]
+        expect(v[0][:index_name]).to eq(safe_index_name("VirtualReplica_replica"))
+        expect(v[0][:virtual]).to eq(true)
+        expect(v[1].to_settings[:replicas]).to be_nil
+      else
+        expect(v[0][:index_name]).to eq(safe_index_name("VirtualReplica_primary"))
+        expect(v[1].to_settings[:replicas]).to match_array(["virtual(#{safe_index_name("VirtualReplica_replica")})"])
+      end
+    end
   end
 end
 

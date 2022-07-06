@@ -1,6 +1,50 @@
 # CHANGELOG
 
-## [Unreleased](https://github.com/algolia/algoliasearch-rails/compare/2.0.0...master)
+## [Unreleased](https://github.com/algolia/algoliasearch-rails/compare/2.2.1...master)
+
+## [2.2.1](https://github.com/algolia/algoliasearch-rails/compare/2.2.0...2.2.1)
+### Fixed
+* fix:settings changes detection issue with empty array [`#424`](https://github.com/algolia/algoliasearch-rails/pull/424)
+* fix: settings changes detection issue for replica indexes with inherit option [`#426`](https://github.com/algolia/algoliasearch-rails/pull/426)
+* fix: make sync opt to be selectable for auto setting update logic [`#425`](https://github.com/algolia/algoliasearch-rails/pull/425)
+
+### Added
+* Add relevancyStrictness to IndexSettings [`#427`](https://github.com/algolia/algoliasearch-rails/pull/427)
+
+## [2.2.0](https://github.com/algolia/algoliasearch-rails/compare/2.1.4...2.2.0)
+### Added
+* Support to pass Algolia API client options [`#420`](https://github.com/algolia/algoliasearch-rails/pull/420)
+
+### Fixed
+* Issue with `FrozenError` for newer Ruby versions [`#418`](https://github.com/algolia/algoliasearch-rails/pull/418)
+* Only check index settings when indexing is enabled [`#416`](https://github.com/algolia/algoliasearch-rails/pull/416)
+* Index intialization documentation [`#419`](https://github.com/algolia/algoliasearch-rails/pull/419)
+
+## [2.1.4](https://github.com/algolia/algoliasearch-rails/compare/2.1.4...2.1.3)
+### Fixed
+- File formatting [`#414`](https://github.com/algolia/algoliasearch-rails/pull/414)
+- Document supported Rails versions [`#407`](https://github.com/algolia/algoliasearch-rails/pull/407)
+- Fixed error when using `:check_settings => false` [`#413`](https://github.com/algolia/algoliasearch-rails/pull/413)
+
+### Removed
+- Old references to TravisCI [`#408`](https://github.com/algolia/algoliasearch-rails/pull/408)
+
+## [2.1.3](https://github.com/algolia/algoliasearch-rails/compare/2.1.3...2.1.2)
+### Fixed
+- Prevent an extra get_settings call even if `check_settings` is false [`#367`](https://github.com/algolia/algoliasearch-rails/pull/367)
+
+## [2.1.2](https://github.com/algolia/algoliasearch-rails/compare/2.1.2...2.1.1)
+### Fixed
+- Error with keys that got symbolized by default [`#403`](https://github.com/algolia/algoliasearch-rails/pull/403)
+
+## [2.1.1](https://github.com/algolia/algoliasearch-rails/compare/2.1.1...2.1.0)
+### Fixed
+- Error with Ruby 3 in regards to default splat behavior [`#400`](https://github.com/algolia/algoliasearch-rails/pull/400)
+
+## [2.1.0](https://github.com/algolia/algoliasearch-rails/compare/2.1.0...2.0.0)
+### Added
+- Add support for [virtual replicas](https://www.algolia.com/doc/guides/managing-results/refine-results/sorting/in-depth/replicas/#what-are-virtual-replicas) ([#386](https://github.com/algolia/algoliasearch-rails/pull/386))
+
 
 ## [2.0.0](https://github.com/algolia/algoliasearch-rails/compare/2.0.0...1.25.0)
 

@@ -1,18 +1,18 @@
 <p align="center">
   <a href="https://www.algolia.com">
-    <img alt="Algolia for Rails" src="https://raw.githubusercontent.com/algolia/algoliasearch-client-common/master/banners/rails.png" >
+    <img alt="Algolia for Rails" src="https://raw.githubusercontent.com/algolia/algoliasearch-client-common/master/banners/rails.png"/>
   </a>
+</p>
 
-  <h4 align="center">The perfect starting point to integrate <a href="https://algolia.com" target="_blank">Algolia</a> within your Rails project</h4>
+<h4 align="center">The perfect starting point to integrate <a href="https://algolia.com" target="_blank">Algolia</a> within your Rails project</h4>
 
-  <p align="center">
-    <a href="https://circleci.com/gh/algolia/algoliasearch-rails"><img src="https://circleci.com/gh/algolia/algoliasearch-rails.svg?style=shield" alt="CircleCI" /></a>
-    <a href="http://badge.fury.io/rb/algoliasearch-rails"><img src="https://badge.fury.io/rb/algoliasearch-rails.svg" alt="Gem Version"></img></a>
-    <a href="https://codeclimate.com/github/algolia/algoliasearch-rails"><img src="https://codeclimate.com/github/algolia/algoliasearch-rails.svg" alt="Code Climate"></img></a>
-    <img src="https://img.shields.io/badge/ActiveRecord-yes-blue.svg?style=flat-square" alt="ActiveRecord"></img>
-    <img src="https://img.shields.io/badge/Mongoid-yes-blue.svg?style=flat-square" alt="Mongoid"></img>
-    <img src="https://img.shields.io/badge/Sequel-yes-blue.svg?style=flat-square" alt="Sequel"></img>
-  </p>
+<p align="center">
+  <a href="https://circleci.com/gh/algolia/algoliasearch-rails"><img src="https://circleci.com/gh/algolia/algoliasearch-rails.svg?style=shield" alt="CircleCI" /></a>
+  <a href="http://badge.fury.io/rb/algoliasearch-rails"><img src="https://badge.fury.io/rb/algoliasearch-rails.svg" alt="Gem Version"/></a>
+  <a href="https://codeclimate.com/github/algolia/algoliasearch-rails"><img src="https://codeclimate.com/github/algolia/algoliasearch-rails.svg" alt="Code Climate"/></a>
+  <img src="https://img.shields.io/badge/ActiveRecord-yes-blue.svg?style=flat-square" alt="ActiveRecord"/>
+  <img src="https://img.shields.io/badge/Mongoid-yes-blue.svg?style=flat-square" alt="Mongoid"/>
+  <img src="https://img.shields.io/badge/Sequel-yes-blue.svg?style=flat-square" alt="Sequel"/>
 </p>
 
 <p align="center">
@@ -26,7 +26,7 @@
 
 
 This gem let you easily integrate the Algolia Search API to your favorite ORM. It's based on the [algoliasearch-client-ruby](https://github.com/algolia/algoliasearch-client-ruby) gem.
-Rails 3.x, 4.x and 5.x are all supported.
+Rails 5.x and 6.x are supported.
 
 You might be interested in the sample Ruby on Rails application providing a `autocomplete.js`-based auto-completion and `InstantSearch.js`-based instant search results page: [algoliasearch-rails-example](https://github.com/algolia/algoliasearch-rails-example/).
 
@@ -517,7 +517,7 @@ class MySidekiqWorker
     if remove
       # the record has likely already been removed from your database so we cannot
       # use ActiveRecord#find to load it
-      index = Algolia::Index.new("index_name")
+      index = AlgoliaSearch.client.init_index("index_name")
       index.delete_object(id)
     else
       # the record should be present
@@ -550,7 +550,7 @@ class MySidekiqWorker
     if remove
       # the record has likely already been removed from your database so we cannot
       # use ActiveRecord#find to load it
-      index = Algolia::Index.new("index_name")
+      index = AlgoliaSearch.client.init_index("index_name")
       index.delete_object(id)
     else
       # the record should be present
@@ -1157,29 +1157,6 @@ class User < ActiveRecord::Base
 
   algoliasearch per_environment: true, disable_indexing: Proc.new { Rails.env.test? || more_complex_condition } do
   end
-end
-```
-
-Or you may want to mock Algolia's API calls. We provide a [WebMock](https://github.com/bblimke/webmock) sample configuration that you can use including `algolia/webmock`:
-
-```ruby
-require 'algolia/webmock'
-
-describe 'With a mocked client' do
-
-  before(:each) do
-    WebMock.enable!
-  end
-
-  it "shouldn't perform any API calls here" do
-    User.create(name: 'My Indexed User')  # mocked, no API call performed
-    User.search('').should == {}          # mocked, no API call performed
-  end
-
-  after(:each) do
-    WebMock.disable!
-  end
-
 end
 ```
 

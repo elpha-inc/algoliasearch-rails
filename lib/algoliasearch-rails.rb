@@ -54,7 +54,7 @@ module AlgoliaSearch
       # Attributes
       :searchableAttributes, :attributesForFaceting, :unretrievableAttributes, :attributesToRetrieve,
       # Ranking
-      :ranking, :customRanking, # Replicas are handled via `add_replica`
+      :ranking, :customRanking, :relevancyStrictness, # Replicas are handled via `add_replica`
       # Faceting
       :maxValuesPerFacet, :sortFacetValuesBy,
       # Highlighting / Snippeting
@@ -211,7 +211,7 @@ module AlgoliaSearch
     def encode_attributes(v)
       case v
       when String
-        v.force_encoding('utf-8')
+        v.dup.force_encoding('utf-8')
       when Hash
         v.each { |key, value| v[key] = encode_attributes(value) }
       when Array
@@ -246,10 +246,12 @@ module AlgoliaSearch
         v = get_setting(k)
         settings[k] = v if !v.nil?
       end
+
       if !@options[:replica]
         settings[:replicas] = additional_indexes.select { |opts, s| opts[:replica] }.map do |opts, s|
           name = opts[:index_name]
           name = "#{name}_#{Rails.env.to_s}" if opts[:per_environment]
+          name = "virtual(#{name})" if opts[:virtual]
           name
         end
         settings.delete(:replicas) if settings[:replicas].empty?
@@ -531,6 +533,7 @@ module AlgoliaSearch
         # fetch the master settings
         master_index = algolia_ensure_init(options, settings)
         master_settings = master_index.get_settings rescue {} # if master doesn't exist yet
+        master_exists = master_settings != {}
         master_settings.merge!(JSON.parse(settings.to_settings.to_json)) # convert symbols to strings
 
         # remove the replicas of the temporary index
@@ -544,14 +547,14 @@ module AlgoliaSearch
         tmp_options.delete(:per_environment) # already included in the temporary index_name
         tmp_settings = settings.dup
 
-        if options[:check_settings] == false
-          @client.copy_index!(src_index_name, tmp_index_name, %w(settings synonyms rules))
+        if options[:check_settings] == false && master_exists
+          AlgoliaSearch.client.copy_index!(src_index_name, tmp_index_name, { scope: %w[settings synonyms rules] })
           tmp_index = SafeIndex.new(tmp_index_name, !!options[:raise_on_failure])
         else
           tmp_index = algolia_ensure_init(tmp_options, tmp_settings, master_settings)
         end
 
-          algolia_find_in_batches(batch_size) do |group|
+        algolia_find_in_batches(batch_size) do |group|
           if algolia_conditional_index?(options)
             # select only indexable objects
             group = group.select { |o| algolia_indexable?(o, tmp_options) }
@@ -784,18 +787,21 @@ module AlgoliaSearch
 
       @algolia_indexes[settings] = SafeIndex.new(algolia_index_name(options), algoliasearch_options[:raise_on_failure])
 
-      current_settings = @algolia_indexes[settings].get_settings(:getVersion => 1) rescue nil # if the index doesn't exist
-
       index_settings ||= settings.to_settings
       index_settings = options[:primary_settings].to_settings.merge(index_settings) if options[:inherit]
+      replicas = index_settings.delete(:replicas) ||
+                 index_settings.delete('replicas')
+      index_settings[:replicas] = replicas unless replicas.nil? || options[:inherit]
 
       options[:check_settings] = true if options[:check_settings].nil?
 
+      current_settings = if options[:check_settings] && !algolia_indexing_disabled?(options)
+                           @algolia_indexes[settings].get_settings(:getVersion => 1) rescue nil # if the index doesn't exist
+                         end
+
       if !algolia_indexing_disabled?(options) && options[:check_settings] && algoliasearch_settings_changed?(current_settings, index_settings)
-        replicas = index_settings.delete(:replicas) ||
-                   index_settings.delete('replicas')
-        index_settings[:replicas] = replicas unless replicas.nil? || options[:inherit]
-        @algolia_indexes[settings].set_settings!(index_settings)
+        set_settings_method = options[:synchronous] ? :set_settings! : :set_settings
+        @algolia_indexes[settings].send(set_settings_method, index_settings)
       end
 
       @algolia_indexes[settings]
@@ -842,6 +848,8 @@ module AlgoliaSearch
         if v.is_a?(Array) and prev_v.is_a?(Array)
           # compare array of strings, avoiding symbols VS strings comparison
           return true if v.map { |x| x.to_s } != prev_v.map { |x| x.to_s }
+        elsif v.blank? # blank? check is needed to compare [] and null
+          return true unless prev_v.blank?
         else
           return true if prev_v != v
         end
